@@ -16,6 +16,8 @@ public class Main {
 
     public static double[][] cumulativeF;
 
+    public static double[] cumulativeZ;
+
     public static boolean posNeg = false;
 
     public static boolean negPos = false;
@@ -67,6 +69,8 @@ public class Main {
 
         cumulativeF = new double[t][n]; // To store the cumulative f(x)
 
+        cumulativeZ = new double[t];
+
         // Step : Perform binary Ada boosting for t iterations
         for(int k = 0; k < t; k++) {
             System.out.println("---");
@@ -78,30 +82,29 @@ public class Main {
                 }
             }
 
-            System.out.println("p value is");
-            for(double i : p)
+            /*for(double i : p)
                 System.out.print(i + " ");
-            System.out.println();
+            System.out.println();*/
 
             double h = createWeakClassifiers(x, y, p);
 
             double alpha = 0.5 * Math.log((1-h)/h);
-            System.out.println("Weight of H (alpha) is " + alpha);
+            System.out.println("3. Weight of H (alpha) is " + alpha);
 
             double qCorrect = Math.exp(-alpha);
 
             double qWrong = Math.exp(alpha);
 
-            System.out.println("Q-Correct = " + qCorrect + " Q-Wrong = " + qWrong);
+            //System.out.println("Q-Correct = " + qCorrect + " Q-Wrong = " + qWrong);
 
             //int[] correctness = new int[n];
             int[] correctness = createCorrectnessMatrix(n, y, k);
 
-            System.out.println("Correctness ");
-            for(int i = 0; i < n; i++) {
+            //System.out.println("Correctness ");
+            /*for(int i = 0; i < n; i++) {
                 System.out.print(correctness[i] + " ");
             }
-            System.out.println();
+            System.out.println();*/
 
             double[] preNormalizedP = findPreNormalized(mainIndex[0], correctness, p, qCorrect, qWrong);
 
@@ -110,11 +113,11 @@ public class Main {
             for(double i : preNormalizedP)
                 z = z + i;
 
-            System.out.println("Probabilities normalization factor Z is " + z);
+            System.out.println("4. The probabilities normalization factor Z is " + z);
 
             double[] normalizedP = new double[n];
 
-            System.out.println("Normalized p");
+            System.out.println("5. The probabilities after normalization p is ");
             for(int i = 0; i < p.length; i++) {
                 normalizedP[i] = preNormalizedP[i]/z;
                 System.out.print(normalizedP[i] + " ");
@@ -131,13 +134,48 @@ public class Main {
             // Step : Find cumulative f(x)
             double[] fx =  findCumulativeFx(alpha, classifier, k);
 
-            System.out.println("Cumulative F(x) ");
+            System.out.println("6. The boosted classifier F(x) is ");
             for(int i = 0; i < n; i++) {
                 cumulativeF[k][i] = fx[i];
                 System.out.print(cumulativeF[k][i] + " ");
             }
             System.out.println();
+
+            int errorOfClassifier = findBoostedClassifierError(fx, y);
+            System.out.println("7. The error of boosted classifier E(t) is " + errorOfClassifier);
+
+            double cumulativeZ = findCumulativeZ(z, k);
+            System.out.println("8. The bound on E(t) is " + cumulativeZ);
         }
+    }
+
+    private static double findCumulativeZ(double z, int k) {
+        double result = 0.0;
+        if(k == 0) {
+            result = z;
+            cumulativeZ[0] = result;
+        }
+
+        if(k > 0) {
+            result = cumulativeZ[k-1] * z;
+            cumulativeZ[k] = result;
+        }
+
+        return result;
+    }
+
+    public static int findBoostedClassifierError(double[] fx, int[] y) {
+        int errorCount = 0;
+        for(int i = 0; i < y.length; i++) {
+            if(fx[i] < 0 && y[i] != -1) {
+                errorCount = errorCount + 1;
+            }
+
+            if(fx[i] >= 0 && y[i] != 1) {
+                errorCount = errorCount + 1;
+            }
+        }
+        return errorCount;
     }
 
     public static int[] createClassifierMatrix(int n, int k) {
@@ -233,17 +271,17 @@ public class Main {
             }
         }
 
-        System.out.println("Pre Normalized p");
-        for(int i = 0; i < p.length; i++)
+        //System.out.println("Pre Normalized p");
+        /*for(int i = 0; i < p.length; i++)
             System.out.print(preNorm[i] + " ");
-        System.out.println();
+        System.out.println();*/
 
         return preNorm;
     }
 
     public static double createWeakClassifiers(double[] x, int[] y, double[] p) {
-        double[] h1 = new double[p.length+1]; // stores error value for each hypothesis of weak classifier
-        double[] h2 = new double[p.length+1]; // stores error value for each hypothesis of weak classifier
+        double[] h1 = new double[p.length+1]; // stores error value for each hypothesis of weak classifier - / +
+        double[] h2 = new double[p.length+1]; // stores error value for each hypothesis of weak classifier + / -
         double minH = Double.MAX_VALUE;
         int index = 0;
         for(int i = 0; i <= p.length; i++) {
@@ -280,8 +318,8 @@ public class Main {
                 }
             }
 
-            System.out.println("H value " + h1[i]);
-            System.out.println("H value " + h2[i]);
+            //System.out.println("H value " + h1[i]);
+            //System.out.println("H value " + h2[i]);
             // keep comparing h with previous h values to find minimum h
             if(h1[i] < h2[i]) {
                 if(h1[i] < minH) {
@@ -303,33 +341,17 @@ public class Main {
         mainIndex[count] = index;
         count = count + 1;
 
-        ArrayList<Double> positive = new ArrayList<Double>();
-        ArrayList<Double> negative = new ArrayList<Double>();
-
-        System.out.println("Selected Weak classifier is H" + (index+1));
-        System.out.println("Index is " + index);
-
-        if(negPos) {
-            for(int i = 0; i < index; i++) {
-                negative.add(x[i]);
-            }
-
-            for(int i = index; i < p.length; i++) {
-                positive.add(x[i]);
-            }
-        } else {
-            for(int i = 0; i < index; i++) {
-                positive.add(x[i]);
-            }
-
-            for(int i = index; i < p.length; i++) {
-                negative.add(x[i]);
-            }
+        if(posNeg) {
+            System.out.println("1. The selected Weak classifier is H(x) = I(x<" + (index-0.5)+")");
         }
 
-        System.out.println("-1, if e = " + negative.toString());
-        System.out.println("+1, if e = " + positive.toString());
-        System.out.println("Error of H" + (index+1)+ " is " + minH);
+        if(negPos) {
+            System.out.println("1. The selected Weak classifier is H(x) = I(x>" + (index-0.5)+")");
+        }
+
+        System.out.println("Index is " + index);
+
+        System.out.println("2. The error of H" + (index+1)+ " is " + minH);
 
         return minH;
     }
