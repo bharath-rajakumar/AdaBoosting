@@ -1,4 +1,4 @@
-package com.company;
+//package com.company;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -10,22 +10,35 @@ public class Main {
 
     public static int[] mainIndex;
 
+    public static int[] mainIndexReal;
+
     public static int count = 0;
 
     public static double[][] normalizedPTable;
 
     public static double[][] cumulativeF;
 
+    public static double[][] cumulativeRealF;
+
     public static double[] cumulativeZ;
+
+    public static double[] cumulativeRealZ;
 
     public static boolean posNeg = false;
 
     public static boolean negPos = false;
 
+    public static double[][] normalizedRealPTable;
+
+    public static double[][] gTable;
+
+    public static String binClassifier;
+
     public static void main(String[] args) {
-	    // Binary AdaBoosting
+        //Note : Comment binary ada boosting if you want to run Real ada boosting and vice versa
+
 	    // Step : Read the input file
-        String file1Contents =  readFile("Input/Input3.txt");
+        String file1Contents =  readFile("Input/adaboost-1.dat");
 
         String[] fileLines = file1Contents.split("\\n");
 
@@ -70,11 +83,17 @@ public class Main {
         cumulativeF = new double[t][n]; // To store the cumulative f(x)
 
         cumulativeZ = new double[t];
+        binClassifier = "";
+
+
+
+
+
 
         // Step : Perform binary Ada boosting for t iterations
         for(int k = 0; k < t; k++) {
-            System.out.println("---");
-            System.out.println("Iteration " + k);
+            System.out.println();
+            System.out.println("Iteration " + (k+1));
             if(k > 0) {
                 // pass the normalized p value calculated in the previous iteration
                 for(int i = 0; i < p.length; i++) {
@@ -82,14 +101,14 @@ public class Main {
                 }
             }
 
-            /*for(double i : p)
+            for(double i : p)
                 System.out.print(i + " ");
-            System.out.println();*/
+            System.out.println();
 
-            double h = createWeakClassifiers(x, y, p);
+            double h = createWeakClassifiers(x,y, p);
 
             double alpha = 0.5 * Math.log((1-h)/h);
-            System.out.println("3. Weight of H (alpha) is " + alpha);
+            System.out.println("Alpha  = " + alpha);
 
             double qCorrect = Math.exp(-alpha);
 
@@ -101,10 +120,10 @@ public class Main {
             int[] correctness = createCorrectnessMatrix(n, y, k);
 
             //System.out.println("Correctness ");
-            /*for(int i = 0; i < n; i++) {
+            for(int i = 0; i < n; i++) {
                 System.out.print(correctness[i] + " ");
             }
-            System.out.println();*/
+            System.out.println();
 
             double[] preNormalizedP = findPreNormalized(mainIndex[0], correctness, p, qCorrect, qWrong);
 
@@ -113,14 +132,18 @@ public class Main {
             for(double i : preNormalizedP)
                 z = z + i;
 
-            System.out.println("4. The probabilities normalization factor Z is " + z);
+            System.out.println("Normalization Factor Z = " + z);
 
             double[] normalizedP = new double[n];
 
-            System.out.println("5. The probabilities after normalization p is ");
+            System.out.print("Pi after normalization = ");
             for(int i = 0; i < p.length; i++) {
                 normalizedP[i] = preNormalizedP[i]/z;
-                System.out.print(normalizedP[i] + " ");
+                if(i == p.length - 1) {
+                    System.out.print(normalizedP[i]);
+                } else {
+                    System.out.print(normalizedP[i] + ", ");
+                }
             }
             System.out.println();
 
@@ -133,23 +156,233 @@ public class Main {
 
             // Step : Find cumulative f(x)
             double[] fx =  findCumulativeFx(alpha, classifier, k);
+            for(int i = 0; i < fx.length; i++) {
+                cumulativeF[k][i] = fx[i];
+            }
 
-            System.out.println("6. The boosted classifier F(x) is ");
+
+            binClassifier = alpha + "*" + binClassifier + "+";
+            System.out.println("Boosted Classifier f(x) = " + binClassifier.substring(0,binClassifier.length()-1));
             for(int i = 0; i < n; i++) {
                 cumulativeF[k][i] = fx[i];
-                System.out.print(cumulativeF[k][i] + " ");
+                if(i == n - 1) {
+                    System.out.print(cumulativeF[k][i]);
+                } else {
+                    System.out.print(cumulativeF[k][i] + ", ");
+                }
             }
             System.out.println();
 
             int errorOfClassifier = findBoostedClassifierError(fx, y);
-            System.out.println("7. The error of boosted classifier E(t) is " + errorOfClassifier);
+            System.out.println("Boosted classifier Error = " + errorOfClassifier);
 
             double cumulativeZ = findCumulativeZ(z, k);
-            System.out.println("8. The bound on E(t) is " + cumulativeZ);
+            System.out.println("Bound on Error = " + cumulativeZ);
         }
+
+
+
+
+
+        // Step : Real Ada boosting
+        posNeg = false;
+        negPos = false;
+
+        normalizedRealPTable = new double[t+1][n];
+
+        mainIndexReal = new int[t]; // Index position that separated negative and positive for each iteration
+
+        gTable = new double[t][2]; // Store all cTPlus and cTMinus for each iteration
+
+        cumulativeRealF = new double[t][n]; // Stores all the cumulative Fx for each iteration and for each example
+
+        cumulativeRealZ = new double[t];
+
+        for(int k = 0; k < t; k++) {
+            System.out.println();
+            System.out.println("Iteration " + (k+1));
+
+            if(k > 0) {
+                // pass the normalized p value calculated in the previous iteration
+                for(int i = 0; i < p.length; i++) {
+                    p[i] = normalizedRealPTable[k][i];
+                }
+            }
+
+            double hReal = createRealWeakClassifier(y, p, x, e, k);
+
+            System.out.println("G error = " + hReal);
+
+            System.out.println("C_Plus = " + gTable[k][0] + ", C_Minus = " + gTable[k][1]);
+            // Step : Build the pre normalized table
+            double[] preNormalized = findRealPreNormalized(gTable[k][0], gTable[k][1], y, p, k);
+
+            // Step : Find normalization factor Z(t)
+            double z = 0.0;
+
+            for(double a : preNormalized)
+                z = z + a;
+            System.out.println("Normalization Factor Z = " + z);
+
+            //Step : Build the normalized table
+            double[] normalizedP = findRealNormalized(z, preNormalized);
+
+            System.out.print("Pi after normalization = ");
+
+            for(int i = 0; i < normalizedP.length; i++) {
+                if(i == n - 1) {
+                    System.out.print(normalizedP[i]);
+                } else {
+                    System.out.print(normalizedP[i] + ", ");
+                }
+            }
+
+            System.out.println();
+
+            for(int i = 0; i < p.length; i++) {
+                normalizedRealPTable[k+1][i] = normalizedP[i];
+            }
+
+            // Step : Store the normalized p, which will be used for the next iteration
+            for(int i = 0; i < p.length; i++) {
+                normalizedRealPTable[k+1][i] = normalizedP[i];
+            }
+
+            // Step : Build the classfier matrix
+            int[] classifier = createRealClassifierMatrix(n, k);
+
+            // Step : find cumulative Fx
+            double[] fx =  findRealCumulativeFx(gTable[k][0], gTable[k][1], classifier, k);
+
+            System.out.print("f(x) = ");
+            for(int i = 0; i < n; i++) {
+                cumulativeRealF[k][i] = fx[i];
+                if(i == n - 1) {
+                    System.out.print(cumulativeRealF[k][i]);
+                } else {
+                    System.out.print(cumulativeRealF[k][i] + ", ");
+                }
+            }
+            System.out.println();
+
+            double error = findBoostedRealClassifierError(fx, y);
+            System.out.println("Boosted Classifier Error = " + error);
+
+            double cumulativeZ = findCumulativeZ(z, k);
+            System.out.println("Bound on Error = " + cumulativeZ);
+        }
+        //Real Ada boosting ends here
     }
 
-    private static double findCumulativeZ(double z, int k) {
+    private static double findBoostedRealClassifierError(double[] fx, int[] y) {
+        int error = 0;
+
+        for(int i = 0; i < y.length; i++) {
+            if(fx[i] < 0 && y[i] != -1)
+                error = error + 1;
+
+            if(fx[i] >= 0 && y[i] != 1)
+                error = error + 1;
+        }
+
+        double result = error/(double)y.length;
+
+        return result;
+    }
+
+    private static double[] findRealCumulativeFx(double cTPlus, double cTMinus, int[] classifier, int k) {
+        double[] result = new double[classifier.length];
+
+        for(int i = 0; i < classifier.length; i++) {
+            if(classifier[i] == -1) {
+                result[i] = cTMinus;
+            } else {
+                result[i] = cTPlus;
+            }
+        }
+
+        if(k > 0) {
+            for(int i = 0; i < classifier.length; i++) {
+                result[i] = result[i] + cumulativeRealF[k - 1][i];
+            }
+            return result;
+        } else {
+            return result;
+        }
+
+    }
+
+    public static int[] createRealClassifierMatrix(int n, int k) {
+        int[] result = new int[n];
+        int index = mainIndexReal[k];
+        if(posNeg) {
+            for(int i = 0; i < n; i++) {
+                if(i < index)
+                    result[i] = 1;
+                else
+                    result[i] = -1;
+            }
+        } else {
+            for(int i = 0; i < n; i++) {
+                if(i < index)
+                    result[i] = -1;
+                else
+                    result[i] = 1;
+            }
+        }
+
+        return result;
+    }
+
+    private static double[] findRealNormalized(double z, double[] preNormalized) {
+        double[] normalized = new double[preNormalized.length];
+        for(int i = 0; i < preNormalized.length; i++) {
+            normalized[i] = preNormalized[i]/z;
+        }
+        return normalized;
+    }
+
+    public static double[] findRealPreNormalized(double cTPlus, double cTMinus, int[] y, double[] p, int k) {
+        double[] preNormalized = new double[y.length];
+
+        // compute the prenormalized p based on the chosen hypothesis
+        int[] h = new int[y.length];
+        int index = mainIndexReal[k];
+
+        if(posNeg) {
+            for(int i = 0; i < index; i++) {
+                h[i] = 1;
+            }
+
+            for(int i = index; i < y.length; i++) {
+                h[i] = -1;
+            }
+        }
+
+        if(negPos) {
+            for(int i = 0; i < index; i++) {
+                h[i] = -1;
+            }
+
+            for(int i = index; i < y.length; i++) {
+                h[i] = 1;
+            }
+        }
+
+        for(int i = 0; i < y.length; i++) {
+            if(h[i] == 1) {
+                preNormalized[i] = p[i] * Math.exp(-1 * y[i] * cTPlus);
+            }
+
+            if(h[i] == -1) {
+                preNormalized[i] = p[i] * Math.exp(-1 * y[i] * cTMinus);
+            }
+        }
+
+        return preNormalized;
+    }
+
+    public static double findCumulativeZ(double z, int k) {
         double result = 0.0;
         if(k == 0) {
             result = z;
@@ -271,11 +504,6 @@ public class Main {
             }
         }
 
-        //System.out.println("Pre Normalized p");
-        /*for(int i = 0; i < p.length; i++)
-            System.out.print(preNorm[i] + " ");
-        System.out.println();*/
-
         return preNorm;
     }
 
@@ -318,8 +546,6 @@ public class Main {
                 }
             }
 
-            //System.out.println("H value " + h1[i]);
-            //System.out.println("H value " + h2[i]);
             // keep comparing h with previous h values to find minimum h
             if(h1[i] < h2[i]) {
                 if(h1[i] < minH) {
@@ -339,21 +565,201 @@ public class Main {
         }
 
         mainIndex[count] = index;
-        count = count + 1;
+
 
         if(posNeg) {
-            System.out.println("1. The selected Weak classifier is H(x) = I(x<" + (index-0.5)+")");
+            if(index == 0) {
+                System.out.println("Classifier h = I(x < " + (x[index] - 0.5) +")");
+                binClassifier = binClassifier + "I(x < " + (x[index] - 0.5) +")";
+            } else if (index == x.length -1) {
+                System.out.println("Classifier h = I(x < " + (x[index] + 0.5) +")");
+                binClassifier = binClassifier + "I(x < " + (x[index] + 0.5) +")";
+            } else {
+                System.out.println("Classifier h = I(x < " + (x[index] + x[index - 1])/2 +")");
+                binClassifier = binClassifier + "I(x < " + (x[index] + x[index - 1])/2 +")";
+            }
         }
 
         if(negPos) {
-            System.out.println("1. The selected Weak classifier is H(x) = I(x>" + (index-0.5)+")");
+            if(index == 0) {
+                System.out.println("Classifier h = I(x > " + (x[index] - 0.5) +")");
+                binClassifier = binClassifier + "I(x > " + (x[index] - 0.5) +")";
+            } else if(index == x.length -1){
+                System.out.println("Classifier h = I(x > " + (x[index] + 0.5) +")");
+                binClassifier = binClassifier + "I(x > " + (x[index] + 0.5) +")";
+            } else {
+                System.out.println("Classifier h = I(x > " + (x[index] + x[index - 1])/2 +")");
+                binClassifier = binClassifier + "I(x > " + (x[index] + x[index - 1])/2 +")";
+            }
         }
 
-        System.out.println("Index is " + index);
+        count = count + 1;
+        //System.out.println("Index is " + index);
 
-        System.out.println("2. The error of H" + (index+1)+ " is " + minH);
+        System.out.println("Error = " + minH);
 
         return minH;
+    }
+
+    public static double createRealWeakClassifier(int[] y, double[] p, double[] x, double epsilon, int k) {
+        double minG = Double.MAX_VALUE;
+        int index = 0;
+        double pRPlus = 0;
+        double pWPlus = 0;
+        double pRMinus = 0;
+        double pWMinus = 0;
+
+        for(int i = 0; i <= p.length; i++) {
+
+            int[] hyp1 = new int[p.length]; // hypothesis matrix with -/+
+            int[] hyp2 = new int[p.length]; // hypothesis matrix with +/-
+
+            // build the first hypothesis matrix with -/+
+            for(int j = 0; j < i; j++) {
+                hyp1[j] = -1;
+            }
+
+            for(int j = i; j < p.length; j++) {
+                hyp1[j] = 1;
+            }
+
+            // build the second hypothesis matrix with +/-
+            for(int j = 0; j < i; j++) {
+                hyp2[j] = 1;
+            }
+
+            for(int j = i; j < p.length; j++) {
+                hyp2[j] = -1;
+            }
+
+            // compute G for hypothesis1
+            double pRPlus1 = 0;
+            double pRMinus1 = 0;
+            double pWPlus1 = 0;
+            double pWMinus1 = 0;
+
+            for(int j = 0; j < p.length; j++) {
+                if(y[j] == -1) {
+                    if(y[j] == hyp1[j]) {
+                        pRMinus1 = pRMinus1 + p[j];
+                    } else {
+                        pWMinus1 = pWMinus1 + p[j];
+                    }
+                }
+
+                if(y[j] == 1) {
+                    if(y[j] == hyp1[j]) {
+                        pRPlus1 = pRPlus1 + p[j];
+                    } else {
+                        pWPlus1 = pWPlus1 + p[j];
+                    }
+                }
+            }
+
+            double g1 = Math.sqrt(pRPlus1*pWMinus1) + Math.sqrt(pRMinus1*pWPlus1);
+
+            // compute G for hypothesis2
+            double pRPlus2 = 0;
+            double pRMinus2 = 0;
+            double pWPlus2 = 0;
+            double pWMinus2 = 0;
+
+            for(int j = 0; j < p.length; j++) {
+                if(y[j] == 1) {
+                    if(y[j] == hyp2[j]) {
+                        pRPlus2 = pRPlus2 + p[j];
+                    } else {
+                        pWPlus2 = pWPlus2 + p[j];
+                    }
+                }
+
+                if(y[j] == -1) {
+                    if(y[j] == hyp2[j]) {
+                        pRMinus2 = pRMinus2 + p[j];
+                    } else {
+                        pWMinus2 = pWMinus2 + p[j];
+                    }
+                }
+            }
+
+            double g2 = Math.sqrt(pRPlus2*pWMinus2) + Math.sqrt(pRMinus2*pWPlus2);
+
+            // find the minimum G value and compare it with previous iteration's minimum G
+            if(g1 < g2) {
+                if (g1 < minG) {
+                    minG = g1;
+                    negPos = true;
+                    posNeg = false;
+                    index = i;
+                    pRPlus = pRPlus1;
+                    pWPlus = pWPlus1;
+                    pRMinus = pRMinus1;
+                    pWMinus = pWMinus1;
+                }
+            } else {
+                if(g2 < minG) {
+                    minG = g2;
+                    posNeg = true;
+                    negPos = false;
+                    index = i;
+                    pRPlus = pRPlus2;
+                    pWPlus = pWPlus2;
+                    pRMinus = pRMinus2;
+                    pWMinus = pWMinus2;
+                }
+            }
+        }
+
+        mainIndexReal[k] = index;
+        //System.out.println("Index is " + index);
+
+        double cTPlus = 0.5 * Math.log((pRPlus + epsilon)/(pWMinus + epsilon));
+        double cTMinus = 0.5 * Math.log((pWPlus + epsilon)/(pRMinus + epsilon));
+
+        if(posNeg) {
+            System.out.println("Classifier h = I(x < " +(x[index] + x[index - 1])/2 +")");
+        }
+
+        if(negPos) {
+            System.out.println("Classifier h = I (x > " +(x[index] + x[index - 1])/2 +")");
+        }
+
+        //store the result
+        gTable[k][0] = cTPlus;
+        gTable[k][1] = cTMinus;
+
+        return minG;
+    }
+
+    private static double computeG(int[] y, double[] p, int[] hyp) {
+        double g = 0;
+        double pRPlus = 0;
+        double pRMinus = 0;
+        double pWPlus = 0;
+        double pWMinus = 0;
+
+        // compare hypothesis matrix with input matrix y to find the 4 probabilities error
+        for(int j = 0; j < p.length; j++) {
+            if(y[j] == 1) {
+                if(y[j] == hyp[j]) {
+                    pRPlus = pRPlus + p[j];
+                } else {
+                    pWPlus = pWPlus + p[j];
+                }
+            }
+
+            if(y[j] == -1) {
+                if(y[j] == hyp[j]) {
+                    pRMinus = pRMinus + p[j];
+                } else {
+                    pWMinus = pWMinus + p[j];
+                }
+            }
+        }
+
+        g = Math.sqrt(pRPlus*pWMinus) + Math.sqrt(pRMinus*pWPlus);
+
+        return g;
     }
 
     // Reads the input file and return its contents as a String
